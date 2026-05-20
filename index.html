@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>King Factory Pipeline -- Kanban Orchestration</title>
+<style>
+  :root {
+    --bg: #0d1117; --card: #161b22; --border: #30363d; --text: #e6edf3;
+    --dim: #8b949e; --blue: #58a6ff; --green: #3fb950; --yellow: #d29922;
+    --red: #f85149; --purple: #bc8cff; --orange: #f0883e;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; padding: 2rem; max-width: 1100px; margin: 0 auto; }
+  a { color: var(--blue); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  h1 { font-size: 2rem; margin-bottom: 0.5rem; }
+  h1 span { color: var(--blue); }
+  .subtitle { color: var(--dim); margin-bottom: 2rem; font-size: 1.1rem; }
+  h2 { font-size: 1.4rem; margin: 2.5rem 0 1rem; color: var(--blue); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+  h3 { font-size: 1.1rem; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 1rem; }
+  .highlight { color: var(--green); font-weight: 600; }
+  .dim { color: var(--dim); }
+  ol, ul { padding-left: 1.5rem; margin-bottom: 1rem; }
+  li { margin-bottom: 0.35rem; }
+  code { background: #1c2128; padding: 0.15rem 0.4rem; border-radius: 4px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.85rem; }
+  .concept-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin: 1.5rem 0; }
+  .concept { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; }
+  .concept-icon { font-size: 2rem; margin-bottom: 0.75rem; }
+  .concept h3 { margin-top: 0; color: var(--text); }
+  .concept p { color: var(--dim); font-size: 0.9rem; margin-bottom: 0; }
+  .pipeline { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin: 1.5rem 0; padding: 1.5rem; background: var(--card); border-radius: 8px; border: 1px solid var(--border); }
+  .stage { background: var(--bg); border: 2px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; min-width: 140px; text-align: center; }
+  .stage.active { border-color: var(--green); box-shadow: 0 0 12px rgba(63, 185, 80, 0.2); }
+  .stage.waiting { border-color: var(--border); opacity: 0.6; }
+  .stage .num { font-size: 0.7rem; color: var(--dim); text-transform: uppercase; letter-spacing: 0.1em; }
+  .stage .name { font-weight: 600; font-size: 0.95rem; margin: 0.25rem 0; }
+  .stage .svc { font-size: 0.7rem; color: var(--purple); }
+  .stage .status { font-size: 0.75rem; padding: 0.15rem 0.5rem; border-radius: 3px; display: inline-block; }
+  .status-ready { background: rgba(63, 185, 80, 0.15); color: var(--green); }
+  .status-todo { background: rgba(139, 148, 158, 0.15); color: var(--dim); }
+  .arrow { color: var(--dim); font-size: 1.5rem; flex-shrink: 0; }
+  .kanban { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin: 1.5rem 0; }
+  @media (max-width: 800px) { .kanban { grid-template-columns: repeat(2, 1fr); } }
+  .kanban-col { background: var(--card); border-radius: 8px; padding: 1rem; border: 1px solid var(--border); }
+  .kanban-col h4 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.75rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); }
+  .kanban-col h4.col-triage { color: var(--yellow); }
+  .kanban-col h4.col-ready { color: var(--blue); }
+  .kanban-col h4.col-running { color: var(--orange); }
+  .kanban-col h4.col-done { color: var(--green); }
+  .task-card { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem; margin-bottom: 0.5rem; font-size: 0.85rem; }
+  .task-card .task-id { color: var(--dim); font-size: 0.7rem; font-family: monospace; }
+  .task-card .task-name { font-weight: 600; margin: 0.25rem 0; }
+  .task-card .task-assignee { color: var(--purple); font-size: 0.75rem; }
+  .task-card.placeholder { border-style: dashed; color: var(--dim); text-align: center; font-style: italic; }
+  .terminal { background: #000; border-radius: 8px; padding: 1.5rem; margin: 1rem 0; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.85rem; overflow-x: auto; border: 1px solid var(--border); white-space: pre; line-height: 1.7; }
+  .t-prompt { color: var(--green); }
+  .t-cmd { color: var(--text); }
+  .t-out { color: var(--dim); }
+  .t-hl { color: var(--blue); }
+  .t-arrow { color: var(--green); }
+  .t-comment { color: #6a737d; }
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin: 1.5rem 0; }
+  @media (max-width: 700px) { .compare { grid-template-columns: 1fr; } }
+  .compare-box { background: var(--card); border-radius: 8px; padding: 1.5rem; border: 1px solid var(--border); }
+  .compare-box.old { border-top: 3px solid var(--red); }
+  .compare-box.new { border-top: 3px solid var(--green); }
+  .compare-box h3 { margin-top: 0; }
+  .compare-box ul { color: var(--dim); font-size: 0.9rem; }
+  .flow { background: var(--card); border-radius: 8px; padding: 2rem; margin: 1.5rem 0; border: 1px solid var(--border); text-align: center; }
+  .flow-row { display: flex; justify-content: center; align-items: center; gap: 0.75rem; margin: 0.5rem 0; flex-wrap: wrap; }
+  .flow-box { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem 1rem; font-size: 0.85rem; }
+  .flow-box.agent { border-color: var(--purple); color: var(--purple); }
+  .flow-box.data { border-color: var(--blue); color: var(--blue); }
+  .flow-box.action { border-color: var(--green); color: var(--green); }
+  .flow-arrow { color: var(--dim); }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.9rem; }
+  th { text-align: left; padding: 0.6rem 0.75rem; background: var(--card); color: var(--blue); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid var(--border); }
+  td { padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); }
+  td code { font-size: 0.8rem; }
+  .note { background: rgba(210, 153, 34, 0.1); border-left: 3px solid var(--yellow); padding: 1rem 1.25rem; border-radius: 0 6px 6px 0; margin: 1rem 0; font-size: 0.9rem; }
+  .note strong { color: var(--yellow); }
+  footer { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--border); color: var(--dim); font-size: 0.8rem; text-align: center; }
+</style>
+</head>
+<body>
+
+<h1>King Factory <span>Pipeline</span></h1>
+<p class="subtitle">How AI agents run the nightly trading pipeline -- from raw market data to FCM delivery.</p>
+
+<!-- ═══ WHAT IS THIS ═══ -->
+<h2>What Is This?</h2>
+<p>Every trading night, King Capital needs to:</p>
+<ol>
+  <li>Download fresh market data from <a href="https://firstratedata.com" target="_blank">FRD (First Rate Data)</a></li>
+  <li>Generate trading signals from that data</li>
+  <li>Calculate how much of each commodity to allocate per account (QRT sizing)</li>
+  <li>Format allocation files for each FCM (broker): StoneX, Wedbush, Marex</li>
+  <li>Deliver those files via SFTP</li>
+  <li>Reconcile what was delivered vs. what was actually executed on <a href="https://www.tradingtechnologies.com/" target="_blank">TT</a></li>
+</ol>
+<p>This is now a <span class="highlight">Kanban board with AI agents</span> that claim tasks, respect dependencies, and hand off work with structured summaries. Powered by <a href="https://github.com/NousResearch/hermes-agent" target="_blank">Hermes Agent</a> running on Bilby (CT 271).</p>
+
+<!-- ═══ REPOS ═══ -->
+<h2>Repositories</h2>
+<table>
+  <thead><tr><th>Repo</th><th>What It Does</th><th>Pipeline Stage</th></tr></thead>
+  <tbody>
+    <tr><td><a href="https://github.com/King-Capital/king-ingest" target="_blank">king-ingest</a></td><td>FRD data download, parsing, DB loading</td><td>Stage 1: FRD Ingest</td></tr>
+    <tr><td><a href="https://github.com/King-Capital/king-signals" target="_blank">king-signals</a></td><td>Trading signal generation from market data</td><td>Stage 2: Signals</td></tr>
+    <tr><td><a href="https://github.com/King-Capital/king-ops" target="_blank">king-ops</a></td><td>Factory module: QRT sizing, CSV adapter, SFTP delivery, reconciliation</td><td>Stages 3-6</td></tr>
+    <tr><td><a href="https://github.com/King-Capital/king-reconciliation" target="_blank">king-reconciliation</a></td><td>Fill matching, break detection, leave management</td><td>Stage 6: Reconcile</td></tr>
+    <tr><td><a href="https://github.com/King-Capital/king-dashboard" target="_blank">king-dashboard</a></td><td>Visual dashboard with factory status panel</td><td>Monitoring</td></tr>
+    <tr><td><a href="https://github.com/King-Capital/king-infra" target="_blank">king-infra</a></td><td>Ansible playbooks, deployment, infrastructure-as-code</td><td>Deployment</td></tr>
+    <tr><td><a href="https://github.com/King-Capital/king-core" target="_blank">king-core</a></td><td>Shared types, Drizzle schemas, utilities</td><td>Shared library</td></tr>
+  </tbody>
+</table>
+
+<!-- ═══ INFRASTRUCTURE ═══ -->
+<h2>Infrastructure</h2>
+<p class="dim">All IPs from <a href="https://github.com/King-Capital/king-infra" target="_blank">king-infra</a> HOSTMAP (auto-updated daily in Open Brain).</p>
+<table>
+  <thead><tr><th>Service</th><th>Host</th><th>IP</th><th>Role</th></tr></thead>
+  <tbody>
+    <tr><td>King Market Data</td><td>CT 304 (px04)</td><td><code>10.71.20.16</code></td><td>PostgreSQL + FRD ingest + signals</td></tr>
+    <tr><td>King Ops</td><td>CT 308 (px05)</td><td><code>10.71.20.108</code></td><td>Factory module (QRT, CSV, SFTP)</td></tr>
+    <tr><td>Bilby / Hermes</td><td>CT 271 (px01)</td><td><code>10.71.20.71</code></td><td>Kanban orchestrator</td></tr>
+    <tr><td>Dashboard</td><td>CT 205 (Caddy)</td><td><code>10.71.20.55</code></td><td>Web UI: <a href="https://king-dashboard.rodaddy.live" target="_blank">king-dashboard.rodaddy.live</a></td></tr>
+    <tr><td>PostgreSQL</td><td>CT 200 (px01)</td><td><code>10.71.20.49:5432</code></td><td>Primary database</td></tr>
+    <tr><td>LiteLLM</td><td>CT 204 (px01)</td><td><code>10.71.1.33:4000</code></td><td>AI model proxy (Anthropic, Gemini)</td></tr>
+    <tr><td>Open Brain</td><td>CT 208 (px01)</td><td><code>10.71.1.15:3100</code></td><td>Knowledge base / vector search</td></tr>
+  </tbody>
+</table>
+
+<!-- ═══ PIPELINE ═══ -->
+<h2>The Pipeline (Dependency Chain)</h2>
+<p class="dim">Each stage only starts when its parent completes. No skipping, no race conditions.</p>
+<div class="pipeline">
+  <div class="stage active">
+    <div class="num">Stage 1</div>
+    <div class="name">FRD Ingest</div>
+    <div class="svc">king-ingest @ CT 304</div>
+    <div class="status status-ready">ready</div>
+  </div>
+  <div class="arrow">→</div>
+  <div class="stage waiting">
+    <div class="num">Stage 2</div>
+    <div class="name">Signals</div>
+    <div class="svc">king-signals @ CT 304</div>
+    <div class="status status-todo">waiting</div>
+  </div>
+  <div class="arrow">→</div>
+  <div class="stage waiting">
+    <div class="num">Stage 3</div>
+    <div class="name">QRT Sizing</div>
+    <div class="svc">king-ops @ CT 308</div>
+    <div class="status status-todo">waiting</div>
+  </div>
+  <div class="arrow">→</div>
+  <div class="stage waiting">
+    <div class="num">Stage 4</div>
+    <div class="name">CSV Gen</div>
+    <div class="svc">king-ops @ CT 308</div>
+    <div class="status status-todo">waiting</div>
+  </div>
+  <div class="arrow">→</div>
+  <div class="stage waiting">
+    <div class="num">Stage 5</div>
+    <div class="name">SFTP</div>
+    <div class="svc">king-ops @ CT 308</div>
+    <div class="status status-todo">waiting</div>
+  </div>
+  <div class="arrow">→</div>
+  <div class="stage waiting">
+    <div class="num">Stage 6</div>
+    <div class="name">Reconcile</div>
+    <div class="svc">king-reconciliation</div>
+    <div class="status status-todo">waiting</div>
+  </div>
+</div>
+
+<!-- ═══ HOW TO ═══ -->
+<h2>How To: Working with the Kanban Board</h2>
+
+<h3>1. SSH into Bilby</h3>
+<div class="terminal"><span class="t-prompt">$</span> <span class="t-cmd">ssh root@10.71.20.71</span></div>
+
+<h3>2. View the Board</h3>
+<div class="terminal"><span class="t-comment"># List all tasks on the king-factory board</span>
+<span class="t-prompt">$</span> <span class="t-cmd">hermes kanban list --board king-factory</span>
+
+<span class="t-arrow">▶</span> <span class="t-hl">t_12e1cfae  ready     (unassigned)          FRD Data Ingest</span>
+<span class="t-out">◻ t_311d814f  todo      (unassigned)          Signal Generation</span>
+<span class="t-out">◻ t_5fcea100  todo      (unassigned)          QRT Sizing</span>
+<span class="t-out">◻ t_b32e0ff9  todo      (unassigned)          CSV Generation</span>
+<span class="t-out">◻ t_4d87bfa6  todo      (unassigned)          SFTP Delivery</span>
+<span class="t-out">◻ t_bc26f9c3  todo      (unassigned)          Reconciliation</span></div>
+
+<h3>3. View Task Details</h3>
+<div class="terminal"><span class="t-comment"># Show a specific task with its comments and context</span>
+<span class="t-prompt">$</span> <span class="t-cmd">hermes kanban show t_12e1cfae --board king-factory</span></div>
+
+<h3>4. Get Board Stats</h3>
+<div class="terminal"><span class="t-prompt">$</span> <span class="t-cmd">hermes kanban stats --board king-factory</span>
+
+<span class="t-out">By status:</span>
+<span class="t-out">  triage    0</span>
+<span class="t-out">  todo      5</span>
+<span class="t-hl">  ready     1</span>
+<span class="t-out">  running   0</span>
+<span class="t-out">  done      0</span></div>
+
+<h3>5. Create a New Task</h3>
+<div class="terminal"><span class="t-comment"># Create a standalone task</span>
+<span class="t-prompt">$</span> <span class="t-cmd">hermes kanban create "Task title" --body "Description" --board king-factory</span>
+
+<span class="t-comment"># Create a task that depends on another (won't start until parent is done)</span>
+<span class="t-prompt">$</span> <span class="t-cmd">hermes kanban create "Child task" --parent t_12e1cfae --board king-factory</span></div>
+
+<h3>6. Assign a Task to an Agent Profile</h3>
+<div class="terminal"><span class="t-comment"># See available agent profiles</span>
+<span class="t-prompt">$</span> <span class="t-cmd">hermes kanban assignees --board king-factory</span>
+
+<span class="t-comment"># Assign a task</span>
+<span class="t-prompt">$</span> <span class="t-cmd">hermes kanban assign t_12e1cfae --assignee ingest-agent --board king-factory</span></div>
+
+<h3>7. Watch Live Progress</h3>
+<div class="terminal"><span class="t-comment"># Stream task events in real-time (Ctrl+C to exit)</span>
+<span class="t-prompt">$</span> <span class="t-cmd">hermes kanban watch --board king-factory</span>
+
+<span class="t-comment"># Follow a specific task's log</span>
+<span class="t-prompt">$</span> <span class="t-cmd">hermes kanban tail t_12e1cfae --board king-factory</span></div>
+
+<h3>8. Mark Tasks Complete / Blocked</h3>
+<div class="terminal"><span class="t-comment"># Complete a task (downstream tasks become ready)</span>
+<span class="t-prompt">$</span> <span class="t-cmd">hermes kanban complete t_12e1cfae --board king-factory</span>
+
+<span class="t-comment"># Block a task (with reason)</span>
+<span class="t-prompt">$</span> <span class="t-cmd">hermes kanban block t_311d814f --board king-factory</span>
+
+<span class="t-comment"># Unblock</span>
+<span class="t-prompt">$</span> <span class="t-cmd">hermes kanban unblock t_311d814f --board king-factory</span></div>
+
+<h3>9. Add Context / Comments</h3>
+<div class="terminal"><span class="t-comment"># Add a comment to a task (agents see this as context)</span>
+<span class="t-prompt">$</span> <span class="t-cmd">hermes kanban comment t_12e1cfae "FRD published at 11:47 PM. Data looks clean."</span></div>
+
+<h3>10. Run the Dispatcher (One Pass)</h3>
+<div class="terminal"><span class="t-comment"># The dispatcher reclaims stale tasks, promotes ready tasks, spawns workers</span>
+<span class="t-prompt">$</span> <span class="t-cmd">hermes kanban dispatch --board king-factory</span></div>
+
+<div class="note">
+  <strong>Note:</strong> The dispatcher also runs automatically inside the Hermes gateway (<code>hermes gateway start</code>). You only need manual dispatch for testing or intervention.
+</div>
+
+<!-- ═══ KANBAN BOARD VISUAL ═══ -->
+<h2>The Kanban Board</h2>
+<p>Tasks move through columns automatically. An agent claims a task, does the work, completes it with a handoff summary, and the next task in the chain becomes ready.</p>
+<div class="kanban">
+  <div class="kanban-col">
+    <h4 class="col-triage">Triage</h4>
+    <div class="task-card placeholder">New tasks land here for orchestrator to break down</div>
+  </div>
+  <div class="kanban-col">
+    <h4 class="col-ready">Ready</h4>
+    <div class="task-card">
+      <div class="task-id">t_12e1cfae</div>
+      <div class="task-name">FRD Data Ingest</div>
+      <div class="task-assignee">dependencies met -- waiting for claim</div>
+    </div>
+  </div>
+  <div class="kanban-col">
+    <h4 class="col-running">Running</h4>
+    <div class="task-card placeholder">Agent claimed and working. Heartbeats keep it alive.</div>
+  </div>
+  <div class="kanban-col">
+    <h4 class="col-done">Done</h4>
+    <div class="task-card placeholder">Completed with structured handoff summary</div>
+  </div>
+</div>
+
+<!-- ═══ KEY CONCEPTS ═══ -->
+<h2>Key Concepts</h2>
+<div class="concept-grid">
+  <div class="concept">
+    <div class="concept-icon">🔗</div>
+    <h3>Dependencies</h3>
+    <p>Each task has a parent. Signal Gen won't start until FRD Ingest finishes. The board enforces this -- no human needed. Set via <code>--parent &lt;task_id&gt;</code>.</p>
+  </div>
+  <div class="concept">
+    <div class="concept-icon">🤖</div>
+    <h3>Agent Profiles</h3>
+    <p>Each stage can have a specialized agent. Profiles live in <code>~/.hermes/profiles/</code> on Bilby. The ingest agent knows FRD's API. The allocator knows TT-to-Bloomberg contract mapping.</p>
+  </div>
+  <div class="concept">
+    <div class="concept-icon">💓</div>
+    <h3>Heartbeats</h3>
+    <p>Running agents send heartbeat signals. If an agent goes silent, the dispatcher reclaims the task and reassigns it. No zombie tasks hanging forever.</p>
+  </div>
+  <div class="concept">
+    <div class="concept-icon">📋</div>
+    <h3>Structured Handoffs</h3>
+    <p>When an agent completes a task, it writes: what changed, what was verified, what the next agent needs to know. Downstream agents get this context via <code>hermes kanban context &lt;id&gt;</code>.</p>
+  </div>
+  <div class="concept">
+    <div class="concept-icon">🔄</div>
+    <h3>Self-Healing</h3>
+    <p>Failed tasks auto-retry (configurable via <code>--max-retries</code>). Persistent failures get blocked and alert. The pipeline doesn't silently die at 2 AM.</p>
+  </div>
+  <div class="concept">
+    <div class="concept-icon">👁️</div>
+    <h3>Visibility</h3>
+    <p>Instead of grepping logs, see the whole pipeline on one board. <code>hermes kanban watch</code> streams events live. <a href="https://king-dashboard.rodaddy.live" target="_blank">king-dashboard</a> shows the factory status panel.</p>
+  </div>
+</div>
+
+<!-- ═══ BEFORE/AFTER ═══ -->
+<h2>Before vs. After</h2>
+<div class="compare">
+  <div class="compare-box old">
+    <h3>Before (Cron + Bash)</h3>
+    <ul>
+      <li>Cron fired at 6:30 PM -- 5 hours before FRD published data</li>
+      <li>Prod sync to dead DB (10.71.20.62) killed the pipeline</li>
+      <li>No visibility -- grep logs to find what happened</li>
+      <li>One failure = everything stops, nobody knows</li>
+      <li>No retry logic, no dependency enforcement</li>
+      <li>Midnight date bug broke freshness checks</li>
+    </ul>
+  </div>
+  <div class="compare-box new">
+    <h3>After (Kanban Agents)</h3>
+    <ul>
+      <li>Polls at 11:30 PM ET, retries every 5 min until data lands</li>
+      <li>No dead prod sync -- data stays on CT 304</li>
+      <li>Visual board + <code>hermes kanban watch</code> for live status</li>
+      <li>Auto-retry with circuit breaker on persistent failure</li>
+      <li>Dependency chain enforced by the board</li>
+      <li>King Coordinator posts status to <a href="https://discord.com/channels/1484908441142296726/1490699991075782866" target="_blank">#king-dev</a></li>
+    </ul>
+  </div>
+</div>
+
+<!-- ═══ DATA FLOW ═══ -->
+<h2>Data Flow</h2>
+<div class="flow">
+  <div class="flow-row">
+    <div class="flow-box data"><a href="https://firstratedata.com" target="_blank" style="color:inherit">FRD API</a></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box agent">Ingest Agent</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box data">CT 304 PostgreSQL</div>
+  </div>
+  <div class="flow-row"><div class="flow-arrow">↓</div></div>
+  <div class="flow-row">
+    <div class="flow-box data">Market Data (29 symbols)</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box agent">Signals Agent</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box data">Trading Signals</div>
+  </div>
+  <div class="flow-row"><div class="flow-arrow">↓</div></div>
+  <div class="flow-row">
+    <div class="flow-box data">Signals + Positions</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box agent">QRT Engine</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box data">Allocations</div>
+  </div>
+  <div class="flow-row"><div class="flow-arrow">↓</div></div>
+  <div class="flow-row">
+    <div class="flow-box data">Allocations</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box agent">CSV Generator</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box action">FCM Files (.csv)</div>
+  </div>
+  <div class="flow-row"><div class="flow-arrow">↓</div></div>
+  <div class="flow-row">
+    <div class="flow-box action">FCM Files</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box agent">SFTP Agent</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box action">StoneX / Wedbush / Marex</div>
+  </div>
+  <div class="flow-row"><div class="flow-arrow">↓</div></div>
+  <div class="flow-row">
+    <div class="flow-box action">Delivered Allocs</div>
+    <div class="flow-arrow">vs</div>
+    <div class="flow-box data">TT Fills</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box agent">Reconciler</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box action">Breaks / Leaves</div>
+  </div>
+</div>
+
+<!-- ═══ TECH STACK ═══ -->
+<h2>Tech Stack</h2>
+<div class="concept-grid">
+  <div class="concept">
+    <div class="concept-icon">🦅</div>
+    <h3><a href="https://github.com/NousResearch/hermes-agent" target="_blank">Hermes Agent</a></h3>
+    <p>Open-source AI agent framework by <a href="https://nousresearch.com" target="_blank">NousResearch</a>. Provides the Kanban board, agent profiles, heartbeats, and task orchestration. v0.13.0 on Bilby (CT 271). <a href="https://hermes-agent.nousresearch.com/docs/user-guide/features/kanban" target="_blank">Kanban docs</a>.</p>
+  </div>
+  <div class="concept">
+    <div class="concept-icon">🐙</div>
+    <h3><a href="https://github.com/anthropics/anthropic-cookbook" target="_blank">OpenClaw</a> (Skippy)</h3>
+    <p>AI assistant gateway. Handles communication, memory, monitoring, and cross-channel coordination. Runs on skippy-oc (Mac Mini M4, 10.71.1.21). <a href="https://docs.openclaw.ai" target="_blank">Docs</a>.</p>
+  </div>
+  <div class="concept">
+    <div class="concept-icon">🧠</div>
+    <h3><a href="https://github.com/rodaddy/open-brain" target="_blank">Open Brain</a></h3>
+    <p>Knowledge base with BM25 + vector search. Stores HOSTMAP (network topology), SOPs, decisions, and pipeline context. At 10.71.1.15:3100. Every agent checks OB before acting.</p>
+  </div>
+</div>
+
+<!-- ═══ QUICK REFERENCE ═══ -->
+<h2>Quick Reference</h2>
+<table>
+  <thead><tr><th>Action</th><th>Command</th></tr></thead>
+  <tbody>
+    <tr><td>SSH to Bilby</td><td><code>ssh root@10.71.20.71</code></td></tr>
+    <tr><td>List tasks</td><td><code>hermes kanban list --board king-factory</code></td></tr>
+    <tr><td>Board stats</td><td><code>hermes kanban stats --board king-factory</code></td></tr>
+    <tr><td>Show task detail</td><td><code>hermes kanban show &lt;task_id&gt; --board king-factory</code></td></tr>
+    <tr><td>Watch live events</td><td><code>hermes kanban watch --board king-factory</code></td></tr>
+    <tr><td>Create task</td><td><code>hermes kanban create "Title" --body "Desc" --board king-factory</code></td></tr>
+    <tr><td>Create with dependency</td><td><code>hermes kanban create "Title" --parent &lt;id&gt; --board king-factory</code></td></tr>
+    <tr><td>Assign agent</td><td><code>hermes kanban assign &lt;id&gt; --assignee &lt;profile&gt;</code></td></tr>
+    <tr><td>Complete task</td><td><code>hermes kanban complete &lt;id&gt;</code></td></tr>
+    <tr><td>Block / Unblock</td><td><code>hermes kanban block &lt;id&gt;</code> / <code>hermes kanban unblock &lt;id&gt;</code></td></tr>
+    <tr><td>Add comment</td><td><code>hermes kanban comment &lt;id&gt; "message"</code></td></tr>
+    <tr><td>Run dispatcher</td><td><code>hermes kanban dispatch --board king-factory</code></td></tr>
+    <tr><td>View task log</td><td><code>hermes kanban log &lt;id&gt;</code></td></tr>
+    <tr><td>View run history</td><td><code>hermes kanban runs &lt;id&gt;</code></td></tr>
+    <tr><td>List boards</td><td><code>hermes kanban boards list</code></td></tr>
+    <tr><td>Switch board</td><td><code>hermes kanban boards switch king-factory</code></td></tr>
+    <tr><td>Search OB for HOSTMAP</td><td><code>mcp2cli open-brain search_brain --params '{"query":"HOSTMAP"}'</code></td></tr>
+  </tbody>
+</table>
+
+<footer>
+  <a href="https://github.com/King-Capital" target="_blank">King Capital</a> -- Built 2026-05-19 -- Powered by <a href="https://github.com/NousResearch/hermes-agent" target="_blank">Hermes Agent</a> + <a href="https://docs.openclaw.ai" target="_blank">OpenClaw</a> + <a href="https://github.com/rodaddy/open-brain" target="_blank">Open Brain</a>
+</footer>
+
+</body>
+</html>
